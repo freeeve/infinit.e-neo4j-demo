@@ -4,14 +4,17 @@ resolvers += "codahale" at "http://repo.codahale.com/"
 
 resolvers += "anormcypher" at "http://repo.anormcypher.org/"
 
+resolvers += "spray repo" at "http://repo.spray.io"
+
+resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
+
 scalaVersion := "2.9.2"
 
 libraryDependencies ++= Seq(
-    "com.roundeights" % "hasher" % "0.3" from "http://cloud.github.com/downloads/Nycto/Hasher/hasher_2.9.1-0.3.jar",
-    "commons-codec" % "commons-codec" % "1.4",
-    "net.databinder.dispatch" %% "dispatch-core" % "0.9.4",
+    "io.spray" % "spray-client" % "1.0-M6",
     "org.anormcypher" %% "anormcypher" % "0.2.2",
-    "org.streum" %% "configrity-core" % "0.10.2"
+    "com.typesafe" % "config" % "1.0.0",
+    "com.typesafe.akka" % "akka-actor" % "2.0.4"
 )
 
 mainClass in (Compile, run) := Some("infiniteneo4jdemo.Transfer")

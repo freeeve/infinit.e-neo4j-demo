@@ -1,52 +1,66 @@
 package infiniteneo4jdemo
 
-import scala.collection.JavaConverters._
 import com.codahale.jerkson.Json._
-import dispatch._
 import org.anormcypher._
-import org.streum.configrity._
+import com.typesafe.config._
+import akka.dispatch.Future
+import akka.actor.{Props, ActorSystem}
+import spray.can.client.HttpClient
+import spray.client.HttpConduit
+import spray.io.IOExtension
+import spray.httpx.SprayJsonSupport
+import spray.http._
 
 object Transfer extends App {
-  val config = Configuration.load("transfer.conf")
+  val config = ConfigFactory.load();
 
-  val communityId = config[String]("infinite.communityId")
-  var infiniteURL = config[String]("infinite.url")
-  val apikey = config[String]("infinite.apikey") 
+  val communityId = config.getString("infinite.communityId")
+  var infiniteHost = config.getString("infinite.host")
+  var infinitePath = config.getString("infinite.path")
+  val apikey = config.getString("infinite.apikey") 
 
-  val neo4jHost = config[String]("neo4j.host")
-  val neo4jPath = config[String]("neo4j.path")
-  val neo4jPort = config[Int]("neo4j.port")
-  
-  val requestURL = infiniteURL + communityId + "?infinite_api_key=" + apikey
-
-  val request = url(infiniteURL).POST <:< Map("accept" -> "application/json", "content-type" -> "application/json")
-
-  // a very generic query--this should get everything!
-  // perhaps we should limit to a particular date range, in a real batch transfer app
-  request.setBody("""
-    {
-      "entityType" :[ "company", "organization", "person"]
-    }
-    """)
-
-  val result = Http(request OK as.String).either
-
-  val res = result()
-  val strResult = res match {
-    case Right(content) => { content; }
-    case Left(content)  => { throw new RuntimeException("error:" + content.getMessage) }
-  }
-
-  val infiniteResult = parse[InfiniteResponse](strResult)
+  val neo4jHost = config.getString("neo4j.host")
+  val neo4jPath = config.getString("neo4j.path")
+  val neo4jPort = config.getInt("neo4j.port")
 
   Neo4jREST.setServer(neo4jHost, neo4jPort, neo4jPath)
+  
+  val requestURL = infinitePath + communityId + "?infinite_api_key=" + apikey
+  println("["+requestURL+"]")
 
-  // loop through documents, load them into neo4j--entities first, then nodes
-  // future: might be good to have a community node, so as to have multiple infinit.e communities within a single neo4j database
-  for(d <- infiniteResult.data) {
-    d match {
-      case doc:InfiniteResponseData => handleDocument(doc)
-    }
+  /* spray client stuff */
+  implicit val system = ActorSystem("infinite-request")
+
+  val ioBridge = IOExtension(system).ioBridge
+
+  val httpClient = system.actorOf(
+    props = Props(new HttpClient(ioBridge)),
+    name = "http-client"
+  )
+
+  val conduit = system.actorOf(
+    props = Props(new HttpConduit(httpClient, infiniteHost)),
+    name = "http-conduit-1"
+  )
+
+  val pipeline = HttpConduit.sendReceive(conduit)
+  val responseFuture = pipeline(HttpRequest(method = HttpMethods.GET, uri = requestURL))
+  responseFuture onComplete {
+    case Right(response) =>
+      val infiniteResult = parse[InfiniteResponse](response.entity.asString)
+      system.stop(conduit) 
+
+      // loop through documents, load them into neo4j--entities first, then nodes
+      // future: might be good to have a community node, so as to have multiple infinit.e communities within a single neo4j database
+      for(d <- infiniteResult.data) {
+        d match {
+          case doc:InfiniteResponseData => handleDocument(doc)
+         }
+      }
+
+      system.shutdown()
+    case Left(error) =>
+      system.shutdown()
   }
 
   def handleDocument(document:InfiniteResponseData) = {
@@ -83,7 +97,7 @@ object Transfer extends App {
       Cypher("""
         START doc=node:node_auto_index(docId={docId})
         CREATE (e {props}),
-               (e)-[:is_referred_by]->(doc)
+               (e)-[:is_referred_by]->(doc),
                (doc)-[:references]->(e)
         """).on(
         "docId" -> document.props("docId"),
@@ -103,7 +117,7 @@ object Transfer extends App {
     // there's actually probably a better way to do the below code.
     val verb = {
       val v = association.verb.getOrElse("").replaceAll(" ", "_") 
-      val vcat = association.verb_category.getOrElse("").replaceAll(" ", "_")
+      val vcat = association.verb_category.getOrElse("").replaceAll(" ", "_").replaceAll("/", "_")
       val tmp = if(v != "" && vcat != "") v + "_" + vcat
                 else v + vcat
       if(tmp == "") "association"
@@ -119,9 +133,10 @@ object Transfer extends App {
         """).on(
           "e1_indexName" -> e1,
           "e2_indexName" -> e2,
-          "props" -> Map("type" -> association.assoc_type)
+          "props" -> Map("type" -> association.assoc_type,
+                         "docId" -> document.props("docId"))
         ).execute()
-        println("type: [" + verb + "]" + result)
+        println(association + "; " + result)
         result
       }
       case _ => { false }
@@ -154,7 +169,7 @@ case class InfiniteResponseData(
   associations:List[InfiniteAssociation],
   communityId:String,
   created:String,
-  description:String, 
+  description:Option[String], 
   entities:List[InfiniteEntity], 
   mediaType:List[String],
   //metadata:Option[Map[String,Any]],

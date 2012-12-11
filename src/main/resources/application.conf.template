@@ -1,0 +1,15 @@
+infinite {
+  host = "api.ikanow.com"
+  path = "/api/knowledge/document/query/"
+  communityId = 50365c5ce4b0bb23272794b3 #election2012
+  # communityId = 503663b1e4b0bb23272794b4 #counter-terrorism
+  # communityId = 50b8fcefe4b024bdb6b48c95 #cars
+  # communityId = 4c927585d591d31d7b37097a #system
+  # communityId = 50354114e4b0bb23272794a4 #enron
+  apikey = asdfasdfasdfasdfasdf
+}
+neo4j {
+  host = localhost
+  path = /db/data/
+  port = 7474
+}

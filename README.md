@@ -9,7 +9,7 @@ Documents, Entities, and Associations get stored.
 
 ```
 (documents {docId:"xxxxxx"})-[:references]->(entity {name:"entity name", indexName:"unique name"})-
-[:verb_verb_category {docId:xxxxxx}]->(another {name:"another entity", etc:""})
+[:verb_verb_category {docId:"xxxxxx"}]->(another {name:"another entity", etc:""})
 ```
 
 ### usage

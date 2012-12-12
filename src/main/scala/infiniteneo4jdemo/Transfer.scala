@@ -94,10 +94,9 @@ object Transfer extends App {
     ).toList
 
     if(list.size == 0) {
-      Cypher("""
+      val result = Cypher("""
         START doc=node:node_auto_index(docId={docId})
         CREATE (e {props}),
-               (e)-[:is_referred_by]->(doc),
                (doc)-[:references]->(e)
         """).on(
         "docId" -> document.props("docId"),
@@ -106,8 +105,18 @@ object Transfer extends App {
           "name" -> entity.actual_name,
           "type" -> entity.`type`
       )).execute()
+      println(entity + "; " + result)
+      result
     } else {
-      false
+      val result = Cypher("""
+        START doc=node:node_auto_index(docId={docId}), e=node:node_auto_index(indexName={name})
+        CREATE (doc)-[:references]->(e)
+        """).on(
+        "docId" -> document.props("docId"),
+        "name" -> entity.index
+      ).execute()
+      println(entity + "; (link only) " + result)
+      result
     }
   }
 
